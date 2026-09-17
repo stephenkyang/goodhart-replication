@@ -1,0 +1,7 @@
+upstream/
+logs/
+.venv/
+.env
+build/
+aborted/
+logs-original/
