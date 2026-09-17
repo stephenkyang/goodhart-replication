@@ -23,6 +23,13 @@ case "$ARM" in
     *) echo "ARM must be swapped or original" >&2; exit 2 ;;
 esac
 
+# A comparison campaign provides its own root so conditions and reruns never mix.
+LOGS=${LOG_ROOT:-$LOGS}
+case "$LOGS" in
+    /*) ;;
+    *) LOGS="$PWD/$LOGS" ;;
+esac
+
 model_id() {
     # inspect-ai drops the provider segment and then an anthropic/ service segment, so the
     # gateway receives anthropic/claude-* for these ids and the bare gpt-* names below.
@@ -64,7 +71,7 @@ rollout() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) start $name ($id, $IMAGE): $epochs rollouts" >> "$LOGS/launches.txt"
     status=0
     .venv/bin/python -c "$LAUNCH" "$PWD/upstream/run/rollout.py" --model "$id" --epochs "$epochs" \
-        --image "$IMAGE" --log-dir "$PWD/$LOGS/$name" >> "$LOGS/$name.out" 2>&1 || status=$?
+        --image "$IMAGE" --log-dir "$LOGS/$name" >> "$LOGS/$name.out" 2>&1 || status=$?
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) end $name: exit $status" >> "$LOGS/launches.txt"
     return $status
 }
