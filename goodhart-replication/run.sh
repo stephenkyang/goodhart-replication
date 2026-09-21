@@ -47,6 +47,9 @@ model_id() {
 # - inspect-ai 0.3.260 does not know gpt-6-astra and would send it over Chat Completions with no
 #   reasoning; registered as a GPT-5.6-family model it goes over the Responses API with reasoning
 #   returned and carried between turns, as gpt-5.6-sol does.
+# - The gateway sometimes returns an explicit server_is_overloaded error instead of a 429/5xx.
+#   transport/gateway_retry.py makes inspect-ai's OpenAI provider treat it as a transient
+#   failure and retry with its existing backoff; nothing about the request changes.
 # - The gateway sits behind Cloudflare, which ends any request that returns nothing for 120 s.
 #   inspect-ai streams Claude, but sends a GPT turn as one silent request, so a turn that thinks
 #   longer failed with a 524 and was retried every ten minutes. OpenAI models therefore run in
@@ -54,6 +57,10 @@ model_id() {
 #   request are unchanged; only how the answer is fetched differs.
 LAUNCH='import runpy, sys
 import inspect_ai
+# The gateway answers some bursts with an explicit server_is_overloaded error; treat it as
+# transient and let inspect-ai back off and retry the same request (both arms, all models).
+from transport import gateway_retry
+gateway_retry.install()
 from inspect_ai.model import ModelInfo, set_model_info
 set_model_info("openai/gpt-6-astra", ModelInfo(family="gpt-5.6"))
 _eval = inspect_ai.eval
@@ -71,7 +78,7 @@ rollout() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) start $name ($id, $IMAGE): $epochs rollouts" >> "$LOGS/launches.txt"
     status=0
     .venv/bin/python -c "$LAUNCH" "$PWD/upstream/run/rollout.py" --model "$id" --epochs "$epochs" \
-        --image "$IMAGE" --log-dir "$LOGS/$name" >> "$LOGS/$name.out" 2>&1 || status=$?
+        --image "$IMAGE" --log-dir "$LOGS/$name" ${ROLLOUT_EXTRA_ARGS:-} >> "$LOGS/$name.out" 2>&1 || status=$?
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) end $name: exit $status" >> "$LOGS/launches.txt"
     return $status
 }
